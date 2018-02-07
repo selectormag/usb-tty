@@ -13,6 +13,9 @@
 
 #define EEWRITE
 
+#define ASCII_FIGS_CHAR '}'
+#define ASCII_LTRS_CHAR '{'
+
 // These are just tested values that will override specific entered values. You can
 // set any value at all, and if it's not in this list, it will just use F_CPU/64/3/X. 
 #define NSPEEDS 5
@@ -139,26 +142,37 @@ int main(void)
     if (flag_tx_ready == 0) { 
       char_from_usb = CDC_Device_ReceiveByte(&VirtualSerial_CDC_Interface);
       if (char_from_usb != 0xFF) { // CDC_Device_ReceiveByte() returns 0xFF when there's no char available.
-	if (confflags & CONF_TRANSLATE) { 
-	  // ASCII CR or LF ---> tty CR _and_ LF
-	  if ((confflags & CONF_CRLF) && ((char_from_usb==0x0d) || (char_from_usb==0x0a))) {
-	    tty_putchar('\r',0);
-	    tty_putchar('\n',0);
-	  } else
-	    tty_putchar(char_from_usb,0);  
-	  
-	  // auto-CRLF on send. only works once we've seen the first newline
-	  if((confflags & CONF_AUTOCR)) {
-	    if(isprint(char_from_usb))
-	      column++;
-	    if((char_from_usb==0x0d) || (char_from_usb==0x0a))
-	      column=0;
-	    if(column >= 68) { // prob should be a config option
-	      tty_putchar('\r',0);
-	      tty_putchar('\n',0);
-	      column = 0;
-	    }
-	  }
+         if (confflags & CONF_TRANSLATE) {
+           // Handle sending FIGS or LTRS shift to TTY loop;
+           // this is particularly helpful to ensure a printer is in
+           // the right shift when starting a new session with it
+           if (char_from_usb == ASCII_FIGS_CHAR) {
+             softuart_putchar(FIGS);
+             continue;
+           }
+           if (char_from_usb == ASCII_LTRS_CHAR) {
+             softuart_putchar(LTRS);
+             continue;
+           }
+	   // ASCII CR or LF ---> tty CR _and_ LF
+	   if ((confflags & CONF_CRLF) && ((char_from_usb==0x0d) || (char_from_usb==0x0a))) {
+	     tty_putchar('\r',0);
+	     tty_putchar('\n',0);
+	   } else
+	     tty_putchar(char_from_usb,0);  
+	   
+	   // auto-CRLF on send. only works once we've seen the first newline
+	   if((confflags & CONF_AUTOCR)) {
+	     if(isprint(char_from_usb))
+	       column++;
+	     if((char_from_usb==0x0d) || (char_from_usb==0x0a))
+	       column=0;
+	     if(column >= 68) { // prob should be a config option
+	       tty_putchar('\r',0);
+	       tty_putchar('\n',0);
+	       column = 0;
+	     }
+	   }
 	} else { 
 	  // we are in transparent mode, just pass the character through unchanged.
 	  if (confflags & CONF_8BIT) 

@@ -144,8 +144,7 @@ int main(void)
       if (char_from_usb != 0xFF) { // CDC_Device_ReceiveByte() returns 0xFF when there's no char available.
          if (confflags & CONF_TRANSLATE) {
            // Handle sending FIGS or LTRS shift to TTY loop;
-           // this is particularly helpful to ensure a printer is in
-           // the right shift when starting a new session with it
+           // 
            if (char_from_usb == ASCII_FIGS_CHAR) {
              softuart_putchar(FIGS);
              continue;

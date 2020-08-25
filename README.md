@@ -1,4 +1,6 @@
-For full info and docs, see http://heepy.net/index.php/USB-teletype
+For full info and docs, see:
+https://teletype.net/display/TEL/Volpe+USB+Interface+Board
+http://heepy.net/index.php/USB-teletype
 
 quickstart: 
 

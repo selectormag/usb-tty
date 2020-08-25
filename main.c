@@ -9,12 +9,17 @@
 #include "usb_serial_getstr.h"
 #include "conf.h"
 #include "main.h"
+#ifdef INCLUDE_AUTOPRINT
 #include "autoprint.h"
+#endif
+
+// Define a control character for FIGS and LTRS so you can cause a FIGS or LTRS to be sent while in translate (ASCII<-->ITA2) mode. Can be a single hex-encoded byte or any ASCII character.
+#define CTL_FIGS_CHAR 0x1E
+#define CTL_LTRS_CHAR 0x1F
+// Define a control character to enter into CLI mode to programmatically configure the board on the fly -- WARNING: will still work while in notranslate (ITA2) mode! If you intend to use notranslate mode, do NOT use a hex-encoded byte (such as 0x16) that is in use in the ITA2 charset. Can be a single hex-encoded byte or any ASCII character.
+#define CTL_AUTOCLI_CHAR 0x16
 
 #define EEWRITE
-
-#define ASCII_FIGS_CHAR '}'
-#define ASCII_LTRS_CHAR '{'
 
 // These are just tested values that will override specific entered values. You can
 // set any value at all, and if it's not in this list, it will just use F_CPU/64/3/X. 
@@ -37,6 +42,7 @@ void ee_write(char *);
 // globals, clean this up. 
 extern volatile unsigned char  flag_tx_ready;
 extern volatile uint8_t framing_error;
+extern volatile uint8_t baudot_shift_send;
 volatile uint8_t host_break = 0;
 uint8_t tableselector = 0; // which ascii/baudot translation table we're using
 
@@ -122,11 +128,13 @@ int main(void)
     // check for end of break condition
     if ((framing_error == 0) && (framing_error_last == 1)) 
       if (confflags & CONF_SHOWBREAK)
+#ifdef INCLUDE_AUTOPRINT
 	if(confflags & CONF_AUTOPRINT) { 
 	  printf_P(PSTR("[Autoprinting... "));
 	  do_autoprint();
 	  printf_P(PSTR("done.]\r\n"));
 	} else
+#endif
 	  printf("[BREAK]\r\n"); 
     framing_error_last = framing_error;
 
@@ -142,36 +150,36 @@ int main(void)
     if (flag_tx_ready == 0) { 
       char_from_usb = CDC_Device_ReceiveByte(&VirtualSerial_CDC_Interface);
       if (char_from_usb != 0xFF) { // CDC_Device_ReceiveByte() returns 0xFF when there's no char available.
-         if (confflags & CONF_TRANSLATE) {
-           // Handle sending FIGS or LTRS shift to TTY loop;
-           // 
-           if (char_from_usb == ASCII_FIGS_CHAR) {
-             softuart_putchar(FIGS);
-             continue;
-           }
-           if (char_from_usb == ASCII_LTRS_CHAR) {
-             softuart_putchar(LTRS);
-             continue;
-           }
-	   // ASCII CR or LF ---> tty CR _and_ LF
-	   if ((confflags & CONF_CRLF) && ((char_from_usb==0x0d) || (char_from_usb==0x0a))) {
-	     tty_putchar('\r',0);
-	     tty_putchar('\n',0);
-	   } else
-	     tty_putchar(char_from_usb,0);  
-	   
-	   // auto-CRLF on send. only works once we've seen the first newline
-	   if((confflags & CONF_AUTOCR)) {
-	     if(isprint(char_from_usb))
-	       column++;
-	     if((char_from_usb==0x0d) || (char_from_usb==0x0a))
-	       column=0;
-	     if(column >= 68) { // prob should be a config option
-	       tty_putchar('\r',0);
-	       tty_putchar('\n',0);
-	       column = 0;
-	     }
-	   }
+	if (confflags & CONF_TRANSLATE) { 
+	  if (char_from_usb == CTL_FIGS_CHAR) {
+	    softuart_putchar(FIGS);
+	    baudot_shift_send = FIGS;
+	    continue;
+	  } 
+	  if (char_from_usb == CTL_LTRS_CHAR) {
+	    softuart_putchar(LTRS);
+	    baudot_shift_send = LTRS;
+	    continue;
+	  } 
+	  // ASCII CR or LF ---> tty CR _and_ LF
+	  if ((confflags & CONF_CRLF) && ((char_from_usb==0x0d) || (char_from_usb==0x0a))) {
+	    tty_putchar('\r',0);
+	    tty_putchar('\n',0);
+	  } else
+	    tty_putchar(char_from_usb,0);  
+	  
+	  // auto-CRLF on send. only works once we've seen the first newline
+	  if((confflags & CONF_AUTOCR)) {
+	    if(isprint(char_from_usb))
+	      column++;
+	    if((char_from_usb==0x0d) || (char_from_usb==0x0a))
+	      column=0;
+	    if(column >= 68) { // prob should be a config option
+	      tty_putchar('\r',0);
+	      tty_putchar('\n',0);
+	      column = 0;
+	    }
+	  }
 	} else { 
 	  // we are in transparent mode, just pass the character through unchanged.
 	  if (confflags & CONF_8BIT) 
@@ -181,8 +189,8 @@ int main(void)
 	}
       }
 
-#ifdef PERCENT_TO_CMDLINE
-      if (char_from_usb == '%') { // just for testing.
+#ifdef AUTOCLI
+      	if (char_from_usb == CTL_AUTOCLI_CHAR) { // to automagically enter CLI mode and programmatically configure the board
 	softuart_turn_rx_off();
         commandline(); 
 	softuart_turn_rx_on();
@@ -303,8 +311,10 @@ void commandline(void)
       printf_P(PSTR("[no]8bit        8bit mode:                 %c      %c\r\n"), 
 	       (confflags & CONF_8BIT)?'Y':'N', (saved & CONF_8BIT)?'Y':'N');
 
+#ifdef INCLUDE_AUTOPRINT
       printf_P(PSTR("[no]autoprint   autoprint mode:            %c      %c\r\n"), 
 	       (confflags & CONF_AUTOPRINT)?'Y':'N', (saved & CONF_AUTOPRINT)?'Y':'N');
+#endif
 
       printf_P(PSTR("table N         Translation table number:  %u      %u\r\n"), 
                tableselector, eeprom_read_byte(EEP_TABLE_SELECT_LOCATION));
@@ -352,6 +362,7 @@ void commandline(void)
       printf_P(PSTR("Do not show break indicator.\r\n"));
     }
 
+#ifdef INCLUDE_AUTOPRINT
     if(strncmp(res, "autoprint", 10) == 0) { 
       valid = 1;
       confflags |= CONF_AUTOPRINT;
@@ -363,6 +374,7 @@ void commandline(void)
       confflags &= ~CONF_AUTOPRINT;
       printf_P(PSTR("Do not print saved text on break.\r\n"));
     }
+#endif
 
     if(strncmp(res, "8bit", 5) == 0) { 
       valid = 1;
@@ -443,10 +455,12 @@ void commandline(void)
       valid = 1;
       ee_wipe();
     }
+#ifdef INCLUDE_AUTOPRINT
     if(strncmp(res, "automsg", 8) == 0) { 
       valid = 1;
       create_automsg();
     }
+#endif
     
 #ifdef EEWRITE
     if(strncmp(res, "eewrite", 8) == 0) { 
@@ -594,7 +608,8 @@ void ee_wipe(void)
   // put in some sane defaults or it will hang on next boot.
   i = 1833; // 45.45 baud
   eeprom_write_block(&i, (void *)EEP_BAUDDIV_LOCATION, (size_t)EEP_BAUDDIV_SIZE);
-  i = CONF_TRANSLATE | CONF_CRLF | CONF_SHOWBREAK;
+  // i = CONF_TRANSLATE | CONF_CRLF | CONF_SHOWBREAK;
+  i = CONF_TRANSLATE | CONF_CRLF;
   eeprom_write_block(&i, (void *)EEP_CONFFLAGS_LOCATION, (size_t)EEP_CONFFLAGS_SIZE);
 
   // copy the default ascii/baudot translation table from flash to eeprom
@@ -653,7 +668,11 @@ void set_softuart_divisor(uint16_t divisor)
 
 void help(void)
 { 
-      printf_P(PSTR("\r\nCommands available:\r\nhelp, baud, table, [no]translate, [no]usos, [no]autocr, [no]showbreak, [no]8bit,\r\n[no]autoprint, automsg, save, load, show, exit\r\n"));
+      printf_P(PSTR("\r\nCommands available:\r\nhelp, baud, table, [no]translate, [no]usos, [no]autocr, [no]showbreak, [no]8bit,\r\n"));
+#ifdef INCLUDE_AUTOPRINT
+      printf_P(PSTR("[no]autoprint, automsg, "));
+#endif
+      printf_P(PSTR("save, load, show, exit\r\n"));
 }
 
 #ifdef EEWRITE

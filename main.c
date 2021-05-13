@@ -1,3 +1,5 @@
+#define INCLUDE_AUTOPRINT
+
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>

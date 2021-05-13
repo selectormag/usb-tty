@@ -14,10 +14,10 @@
 #endif
 
 // Define a control character for FIGS and LTRS so you can cause a FIGS or LTRS to be sent while in translate (ASCII<-->ITA2) mode. Can be a single hex-encoded byte or any ASCII character.
-#define CTL_FIGS_CHAR 0x1E
-#define CTL_LTRS_CHAR 0x1F
+#define CTL_FIGS_CHAR '}'
+#define CTL_LTRS_CHAR '{'
 // Define a control character to enter into CLI mode to programmatically configure the board on the fly -- WARNING: will still work while in notranslate (ITA2) mode! If you intend to use notranslate mode, do NOT use a hex-encoded byte (such as 0x16) that is in use in the ITA2 charset. Can be a single hex-encoded byte or any ASCII character.
-#define CTL_AUTOCLI_CHAR 0x16
+#define CTL_AUTOCLI_CHAR '%'
 
 #define EEWRITE
 
